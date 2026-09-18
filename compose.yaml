@@ -1,0 +1,63 @@
+services:
+  submission-extractor:
+    build:
+      context: ../insurance-submission-extractor
+      dockerfile: Dockerfile
+    image: insurance-submission-extractor:platform
+    environment:
+      LLM_PROVIDER: ${LLM_PROVIDER:-groq}
+      GROQ_API_KEY: ${GROQ_API_KEY}
+      GROQ_MODEL: ${GROQ_MODEL:-openai/gpt-oss-120b}
+      GROQ_MAX_RETRIES: ${GROQ_MAX_RETRIES:-3}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.7-flash}
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+
+
+  knowledge-agent:
+    build:
+      context: ../insurance-rag-assistant
+      dockerfile: Dockerfile
+    image: insurance-rag-assistant:platform
+    environment:
+      GROQ_API_KEY: ${GROQ_API_KEY}
+      GROQ_MODEL_NAME: ${GROQ_MODEL_NAME:-openai/gpt-oss-20b}
+      HF_HOME: /app/.cache/huggingface
+      SENTENCE_TRANSFORMERS_HOME: /app/.cache/sentence-transformers
+    ports:
+      - "8001:8001"
+    volumes:
+      - rag_vector_store:/app/vector_store
+      - rag_artifacts:/app/artifacts
+      - rag_model_cache:/app/.cache
+    restart: unless-stopped
+
+
+  underwriting-agent:
+    build:
+      context: ../underwriting-agent
+      dockerfile: Dockerfile
+    image: underwriting-agent:platform
+    depends_on:
+      submission-extractor:
+        condition: service_started
+    environment:
+      DATABASE_URL: sqlite:////app/data/underwriting_agent.db
+      SUBMISSION_EXTRACTOR_BASE_URL: http://submission-extractor:8000
+      SUBMISSION_EXTRACTOR_TIMEOUT_SECONDS: ${SUBMISSION_EXTRACTOR_TIMEOUT_SECONDS:-30}
+      KNOWLEDGE_AGENT_BASE_URL: http://knowledge-agent:8001
+      KNOWLEDGE_AGENT_TIMEOUT_SECONDS: ${KNOWLEDGE_AGENT_TIMEOUT_SECONDS:-10}
+    ports:
+      - "8002:8002"
+    volumes:
+      - underwriting_agent_data:/app/data
+    restart: unless-stopped
+
+volumes:
+  underwriting_agent_data:
+  rag_vector_store:
+  rag_artifacts:
+  rag_model_cache:
+
