@@ -1,9 +1,34 @@
 services:
+  postgres:
+    image: pgvector/pgvector:pg17
+    environment:
+      POSTGRES_USER: ${POSTGRES_SUPERUSER:-platform_admin}
+      POSTGRES_PASSWORD: ${POSTGRES_SUPERUSER_PASSWORD:?Set POSTGRES_SUPERUSER_PASSWORD in .env}
+      POSTGRES_DB: postgres
+      EXTRACTOR_DB_PASSWORD: ${EXTRACTOR_DB_PASSWORD:?Set EXTRACTOR_DB_PASSWORD in .env}
+      UNDERWRITING_DB_PASSWORD: ${UNDERWRITING_DB_PASSWORD:?Set UNDERWRITING_DB_PASSWORD in .env}
+      KNOWLEDGE_DB_PASSWORD: ${KNOWLEDGE_DB_PASSWORD:?Set KNOWLEDGE_DB_PASSWORD in .env}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    restart: unless-stopped
+
   submission-extractor:
     build:
       context: ../insurance-submission-extractor
       dockerfile: Dockerfile
     image: insurance-submission-extractor:platform
+    depends_on:
+      postgres:
+        condition: service_healthy
     environment:
       LLM_PROVIDER: ${LLM_PROVIDER:-groq}
       GROQ_API_KEY: ${GROQ_API_KEY}
@@ -11,10 +36,11 @@ services:
       GROQ_MAX_RETRIES: ${GROQ_MAX_RETRIES:-3}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.7-flash}
+      DATABASE_URL: postgresql://extractor_app:${EXTRACTOR_DB_PASSWORD}@postgres:5432/extractor
+      DATABASE_AUTO_MIGRATE: "true"
     ports:
       - "8000:8000"
     restart: unless-stopped
-
 
   knowledge-agent:
     build:
@@ -33,7 +59,6 @@ services:
       - rag_artifacts:/app/artifacts
       - rag_model_cache:/app/.cache
     restart: unless-stopped
-
 
   underwriting-agent:
     build:
@@ -56,8 +81,8 @@ services:
     restart: unless-stopped
 
 volumes:
+  postgres_data:
   underwriting_agent_data:
   rag_vector_store:
   rag_artifacts:
   rag_model_cache:
-

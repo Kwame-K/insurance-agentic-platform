@@ -1,6 +1,6 @@
 # Insurance Agentic Platform
 
-Local Docker Compose platform that runs the three HTTP-facing insurance agent projects together: the Submission Extractor, the Insurance RAG Assistant (Insurance Knowledge Agent), and the Underwriting Agent. It is the orchestration layer of a five-project insurance agentic AI portfolio, wiring the services together on a shared Docker network without changing any of their internal logic.
+Local Docker Compose platform that runs the three HTTP-facing insurance agent projects together with a shared PostgreSQL server: the Submission Extractor, the Insurance RAG Assistant (Insurance Knowledge Agent), and the Underwriting Agent. It is the orchestration layer of a five-project insurance agentic AI portfolio, wiring the services together on a shared Docker network without changing any of their internal logic.
 
 > **Scope note:** this is a portfolio and learning project. All underwriting rules, risk scores, pricing, and insurance documents served by the underlying projects are synthetic or demonstrative.
 
@@ -11,6 +11,7 @@ Local Docker Compose platform that runs the three HTTP-facing insurance agent pr
 | Submission Extractor | `submission-extractor` | http://localhost:8000 | Project 1 (`../insurance-submission-extractor`) | Extracts candidate submission data from broker text |
 | Insurance Knowledge Agent | `knowledge-agent` | http://localhost:8001 | Project 3 (`../insurance-rag-assistant`) | Retrieves grounded, cited policy evidence from a local Qdrant vector store |
 | Underwriting Agent | `underwriting-agent` | http://localhost:8002 | Project 4 (`../underwriting-agent`) | Orchestrates extraction, underwriting rules, risk scoring, pricing, and evidence retrieval |
+| Shared PostgreSQL | `postgres` | localhost:5432 | Platform infrastructure | Isolated `extractor`, `underwriting`, and `knowledge` databases; pgvector-ready |
 
 Project 2 (Data Analyst Agent) is a CLI-based tool and is not currently part of this Compose stack.
 
@@ -24,13 +25,17 @@ Project 2 (Data Analyst Agent) is a CLI-based tool and is not currently part of 
                                                               |
   knowledge-agent        <---- evidence retrieval -----------'
   :8001
+
+  postgres :5432 -- extractor (connected now), underwriting (reserved), knowledge (reserved)
 ```
 
 Each service is built from its own repository via a relative build context, so this repository contains no application source code of its own — only the orchestration configuration.
 
 ```text
 insurance-agentic-platform/
-├── compose.yaml          # Three-service Docker Compose definition
+├── compose.yaml          # Services plus shared PostgreSQL definition
+├── postgres/init/        # One-time database and role provisioning
+├── .env.example          # Tracked configuration template
 ├── .env                  # Local secrets and overrides (never committed)
 ├── .gitignore            # Ignores .env, .env.*, .DS_Store, volumes/
 └── volumes/              # Local bind-mount placeholder (currently empty, gitignored)
@@ -51,38 +56,29 @@ insurance-agentic-platform/
 
 ## Configuration
 
-This repository does not currently ship a `.env.example` file. Create a local `.env` file directly with the following keys before starting the stack:
+Copy the tracked template, then replace every placeholder with a distinct, long random secret:
 
-```dotenv
-# --------------------------------------------------
-# Project 1 — Insurance Submission Extractor
-# --------------------------------------------------
-
-# Choose one provider: groq or gemini.
-LLM_PROVIDER=groq
-
-# Required when LLM_PROVIDER=groq
-GROQ_API_KEY=
-GROQ_MODEL=openai/gpt-oss-120b
-GROQ_MAX_RETRIES=3
-
-# Required only when LLM_PROVIDER=gemini
-GEMINI_API_KEY=
-GEMINI_MODEL=gemini-3.7-flash
-
-# --------------------------------------------------
-# Project 3 — Insurance RAG Assistant
-# --------------------------------------------------
-GROQ_MODEL_NAME=openai/gpt-oss-20b
-
-# --------------------------------------------------
-# Project 4 — Underwriting Agent
-# --------------------------------------------------
-SUBMISSION_EXTRACTOR_TIMEOUT_SECONDS=30
-KNOWLEDGE_AGENT_TIMEOUT_SECONDS=10
+```bash
+cp .env.example .env
 ```
 
-Do not commit `.env`; it is already excluded by `.gitignore`, which allows only a future `.env.example` to be tracked.
+`POSTGRES_SUPERUSER_PASSWORD` is used only to initialize PostgreSQL. Each agent uses its own role:
+
+| Agent | Database | Login role | Current connection |
+|---|---|---|---|
+| Submission Extractor | `extractor` | `extractor_app` | Connected through `DATABASE_URL`; migrations run on its first write |
+| Underwriting Agent | `underwriting` | `underwriting_app` | Reserved; it continues to use SQLite in this stage |
+| Knowledge Agent | `knowledge` | `knowledge_app` | Reserved with the `vector` extension; it continues to use Qdrant in this stage |
+
+The initialization script runs only on an empty `postgres_data` volume. Changing a password in
+`.env` after first startup does **not** change the corresponding PostgreSQL role. For local reset
+only, use `docker compose down -v`, update `.env`, then start again. This deletes every named
+volume, including the RAG index and the Underwriting SQLite database.
+
+`POSTGRES_PORT` defaults to 5432. Set it to another host port (for example 5434) if another local
+PostgreSQL server already uses 5432. Containers always reach Postgres at `postgres:5432`.
+
+Do not commit `.env`; it is excluded by `.gitignore`.
 
 ## Start
 
@@ -104,7 +100,7 @@ The first build downloads the multilingual embedding model used by the Knowledge
 docker compose down
 ```
 
-Stop and remove named volumes (this deletes the local Qdrant index, RAG evaluation artifacts, model cache, and the underwriting SQLite database):
+Stop and remove named volumes (this deletes PostgreSQL data, the local Qdrant index, RAG evaluation artifacts, model cache, and the underwriting SQLite database):
 
 ```bash
 docker compose down -v
@@ -114,7 +110,8 @@ docker compose down -v
 
 | Volume | Mounted in | Purpose |
 |---|---|---|
-| `underwriting_agent_data` | `underwriting-agent:/app/data` | SQLite database of submissions, decisions, reviews, and audit events |
+| `postgres_data` | `postgres:/var/lib/postgresql/data` | Shared PostgreSQL cluster with isolated agent databases and roles |
+| `underwriting_agent_data` | `underwriting-agent:/app/data` | SQLite database of submissions, decisions, reviews, and audit events (temporary until its PostgreSQL migration) |
 | `rag_vector_store` | `knowledge-agent:/app/vector_store` | Local Qdrant collection of embedded policy documents |
 | `rag_artifacts` | `knowledge-agent:/app/artifacts` | Retrieval evaluation reports |
 | `rag_model_cache` | `knowledge-agent:/app/.cache` | Cached Hugging Face / sentence-transformers embedding model |
@@ -123,7 +120,7 @@ These are Docker-managed named volumes, distinct from the local `volumes/` folde
 
 ## Service Startup Order
 
-`underwriting-agent` declares `depends_on: submission-extractor` with `condition: service_started`, so Compose starts the extractor first. This only guarantees container start order, not full application readiness — there is currently no health-check-based dependency between services.
+`submission-extractor` waits for PostgreSQL to pass its `pg_isready` healthcheck before starting. Its first database write applies the packaged Alembic migrations automatically. `underwriting-agent` declares `depends_on: submission-extractor` with `condition: service_started`, so Compose starts the extractor first. This only guarantees container start order, not full application readiness — there is currently no health-check-based dependency between services.
 
 ## Test the End-to-End Workflow
 
@@ -154,11 +151,11 @@ curl http://127.0.0.1:8002/health   # Underwriting Agent
 - **No shared application code:** every service is built from its own independent repository; this repository only defines networking, environment wiring, and volumes.
 - **HTTP service boundaries:** services communicate over the Docker network using their internal ports (for example `http://knowledge-agent:8001`), matching the same HTTP contracts used in local, non-containerized development.
 - **Secrets stay local:** provider API keys are injected only through `.env`, which is never committed.
-- **Explicit persistence:** each stateful service (Qdrant index, SQLite database, model cache) uses a named Docker volume so state survives container restarts but can be reset deliberately with `docker compose down -v`.
+- **Isolated database ownership:** one PostgreSQL server is shared for operations, but every agent receives a separate database and login role; agents communicate through HTTP rather than each other's tables.
+- **Explicit persistence:** each stateful service (PostgreSQL, Qdrant index, SQLite database, model cache) uses a named Docker volume so state survives container restarts but can be reset deliberately with `docker compose down -v`.
 
 ## Known Limitations
 
-- No `.env.example` file is currently tracked, so new contributors must construct `.env` manually from this README.
 - Project 2 (Data Analyst Agent) is CLI-only and is not included in this Compose stack.
 - There is no health-check-based `depends_on` condition, so a request to `underwriting-agent` shortly after startup may fail if `submission-extractor` or `knowledge-agent` has not finished initializing.
 - There is no reverse proxy, TLS termination, or authentication layer; all ports are exposed directly on localhost.
@@ -166,7 +163,6 @@ curl http://127.0.0.1:8002/health   # Underwriting Agent
 
 ## Roadmap
 
-- [ ] Add a tracked `.env.example` file with placeholder values for all required keys.
 - [ ] Add health-check-based `depends_on` conditions so `underwriting-agent` waits for dependent services to be ready, not just started.
 - [ ] Add Project 2 (Data Analyst Agent) as an optional service in this Compose stack.
 - [ ] Add a reverse proxy (for example Caddy or Nginx) for unified routing and TLS in non-local environments.
