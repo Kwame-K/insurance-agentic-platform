@@ -66,23 +66,22 @@ services:
       dockerfile: Dockerfile
     image: underwriting-agent:platform
     depends_on:
+      postgres:
+        condition: service_healthy
       submission-extractor:
         condition: service_started
     environment:
-      DATABASE_URL: sqlite:////app/data/underwriting_agent.db
+      DATABASE_URL: postgresql://underwriting_app:${UNDERWRITING_DB_PASSWORD}@postgres:5432/underwriting
       SUBMISSION_EXTRACTOR_BASE_URL: http://submission-extractor:8000
       SUBMISSION_EXTRACTOR_TIMEOUT_SECONDS: ${SUBMISSION_EXTRACTOR_TIMEOUT_SECONDS:-30}
       KNOWLEDGE_AGENT_BASE_URL: http://knowledge-agent:8001
       KNOWLEDGE_AGENT_TIMEOUT_SECONDS: ${KNOWLEDGE_AGENT_TIMEOUT_SECONDS:-10}
     ports:
       - "8002:8002"
-    volumes:
-      - underwriting_agent_data:/app/data
     restart: unless-stopped
 
 volumes:
   postgres_data:
-  underwriting_agent_data:
   rag_vector_store:
   rag_artifacts:
   rag_model_cache:

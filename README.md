@@ -26,7 +26,7 @@ Project 2 (Data Analyst Agent) is a CLI-based tool and is not currently part of 
   knowledge-agent        <---- evidence retrieval -----------'
   :8001
 
-  postgres :5432 -- extractor (connected now), underwriting (reserved), knowledge (reserved)
+  postgres :5432 -- extractor and underwriting (connected now), knowledge (reserved)
 ```
 
 Each service is built from its own repository via a relative build context, so this repository contains no application source code of its own — only the orchestration configuration.
@@ -67,13 +67,13 @@ cp .env.example .env
 | Agent | Database | Login role | Current connection |
 |---|---|---|---|
 | Submission Extractor | `extractor` | `extractor_app` | Connected through `DATABASE_URL`; migrations run on its first write |
-| Underwriting Agent | `underwriting` | `underwriting_app` | Reserved; it continues to use SQLite in this stage |
+| Underwriting Agent | `underwriting` | `underwriting_app` | Connected through `DATABASE_URL`; Alembic migrations run at startup |
 | Knowledge Agent | `knowledge` | `knowledge_app` | Reserved with the `vector` extension; it continues to use Qdrant in this stage |
 
 The initialization script runs only on an empty `postgres_data` volume. Changing a password in
 `.env` after first startup does **not** change the corresponding PostgreSQL role. For local reset
 only, use `docker compose down -v`, update `.env`, then start again. This deletes every named
-volume, including the RAG index and the Underwriting SQLite database.
+volume, including PostgreSQL data, the RAG index, and all Underwriting records.
 
 `POSTGRES_PORT` defaults to 5432. Set it to another host port (for example 5434) if another local
 PostgreSQL server already uses 5432. Containers always reach Postgres at `postgres:5432`.
@@ -100,7 +100,7 @@ The first build downloads the multilingual embedding model used by the Knowledge
 docker compose down
 ```
 
-Stop and remove named volumes (this deletes PostgreSQL data, the local Qdrant index, RAG evaluation artifacts, model cache, and the underwriting SQLite database):
+Stop and remove named volumes (this deletes PostgreSQL data, the local Qdrant index, RAG evaluation artifacts, and model cache):
 
 ```bash
 docker compose down -v
@@ -111,7 +111,6 @@ docker compose down -v
 | Volume | Mounted in | Purpose |
 |---|---|---|
 | `postgres_data` | `postgres:/var/lib/postgresql/data` | Shared PostgreSQL cluster with isolated agent databases and roles |
-| `underwriting_agent_data` | `underwriting-agent:/app/data` | SQLite database of submissions, decisions, reviews, and audit events (temporary until its PostgreSQL migration) |
 | `rag_vector_store` | `knowledge-agent:/app/vector_store` | Local Qdrant collection of embedded policy documents |
 | `rag_artifacts` | `knowledge-agent:/app/artifacts` | Retrieval evaluation reports |
 | `rag_model_cache` | `knowledge-agent:/app/.cache` | Cached Hugging Face / sentence-transformers embedding model |
@@ -120,7 +119,7 @@ These are Docker-managed named volumes, distinct from the local `volumes/` folde
 
 ## Service Startup Order
 
-`submission-extractor` waits for PostgreSQL to pass its `pg_isready` healthcheck before starting. Its first database write applies the packaged Alembic migrations automatically. `underwriting-agent` declares `depends_on: submission-extractor` with `condition: service_started`, so Compose starts the extractor first. This only guarantees container start order, not full application readiness — there is currently no health-check-based dependency between services.
+`submission-extractor` and `underwriting-agent` wait for PostgreSQL to pass its `pg_isready` healthcheck before starting. The Extractor applies its packaged Alembic migrations on its first database write; the Underwriting Agent applies its migrations at startup. `underwriting-agent` declares `depends_on: submission-extractor` with `condition: service_started`, so Compose starts the extractor first. This only guarantees container start order, not full application readiness — there is currently no health-check-based dependency between services.
 
 ## Test the End-to-End Workflow
 
@@ -152,7 +151,7 @@ curl http://127.0.0.1:8002/health   # Underwriting Agent
 - **HTTP service boundaries:** services communicate over the Docker network using their internal ports (for example `http://knowledge-agent:8001`), matching the same HTTP contracts used in local, non-containerized development.
 - **Secrets stay local:** provider API keys are injected only through `.env`, which is never committed.
 - **Isolated database ownership:** one PostgreSQL server is shared for operations, but every agent receives a separate database and login role; agents communicate through HTTP rather than each other's tables.
-- **Explicit persistence:** each stateful service (PostgreSQL, Qdrant index, SQLite database, model cache) uses a named Docker volume so state survives container restarts but can be reset deliberately with `docker compose down -v`.
+- **Explicit persistence:** each stateful service (PostgreSQL, Qdrant index, model cache) uses a named Docker volume so state survives container restarts but can be reset deliberately with `docker compose down -v`.
 
 ## Known Limitations
 
@@ -201,5 +200,5 @@ curl http://127.0.0.1:8002/health   # Underwriting Agent
 - **Clean orchestration boundary**: this repository contains zero business logic — it only wires together independently versioned services, keeping the agentic decision logic (Projects 1, 3, and 4) fully decoupled from deployment concerns.
 - **Explicit, typed service contracts over shared state**: services communicate only through their existing HTTP APIs on the Docker network, the same contracts used in local development, avoiding hidden coupling through shared databases or file systems.
 - **Secrets isolation**: provider credentials are injected exclusively through environment variables at the orchestration layer, never baked into images or committed to source control.
-- **Stateful services are explicitly persisted**: the Qdrant index, SQLite database, and model cache each have a dedicated named volume, making state lifecycle (keep vs. reset via `-v`) an explicit operator decision rather than an accident of container storage.
+- **Stateful services are explicitly persisted**: PostgreSQL, the Qdrant index, and the model cache each have a dedicated named volume, making state lifecycle (keep vs. reset via `-v`) an explicit operator decision rather than an accident of container storage.
 - **Next practice to adopt**: introduce health-check-based readiness gating (`condition: service_healthy`) so the orchestration layer itself models the same fail-safe-over-fail-open principle already applied inside the Underwriting Agent's service integrations.
