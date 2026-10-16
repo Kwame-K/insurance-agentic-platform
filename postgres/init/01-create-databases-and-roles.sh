@@ -7,6 +7,7 @@ set -euo pipefail
 : "${EXTRACTOR_DB_PASSWORD:?EXTRACTOR_DB_PASSWORD is required}"
 : "${UNDERWRITING_DB_PASSWORD:?UNDERWRITING_DB_PASSWORD is required}"
 : "${KNOWLEDGE_DB_PASSWORD:?KNOWLEDGE_DB_PASSWORD is required}"
+: "${ANALYST_DB_PASSWORD:?ANALYST_DB_PASSWORD is required}" 
 
 run_sql() {
   psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname postgres "$@"
@@ -23,9 +24,10 @@ create_app_database() {
 create_app_database extractor_app extractor "$EXTRACTOR_DB_PASSWORD"
 create_app_database underwriting_app underwriting "$UNDERWRITING_DB_PASSWORD"
 create_app_database knowledge_app knowledge "$KNOWLEDGE_DB_PASSWORD"
+create_app_database analyst_app analyst "$ANALYST_DB_PASSWORD"
 
 # The Knowledge Agent will use pgvector in a later migration.
 echo "CREATE EXTENSION IF NOT EXISTS vector;" |
   psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname knowledge
 
-echo "Created databases: extractor, underwriting, knowledge."
+echo "Created databases: extractor, underwriting, knowledge, analyst."

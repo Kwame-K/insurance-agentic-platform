@@ -8,6 +8,7 @@ services:
       EXTRACTOR_DB_PASSWORD: ${EXTRACTOR_DB_PASSWORD:?Set EXTRACTOR_DB_PASSWORD in .env}
       UNDERWRITING_DB_PASSWORD: ${UNDERWRITING_DB_PASSWORD:?Set UNDERWRITING_DB_PASSWORD in .env}
       KNOWLEDGE_DB_PASSWORD: ${KNOWLEDGE_DB_PASSWORD:?Set KNOWLEDGE_DB_PASSWORD in .env}
+      ANALYST_DB_PASSWORD: ${ANALYST_DB_PASSWORD:?Set ANALYST_DB_PASSWORD in .env}
     ports:
       - "${POSTGRES_PORT:-5432}:5432"
     volumes:
@@ -18,6 +19,37 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+      start_period: 10s
+    restart: unless-stopped
+
+  data-analyst-agent:
+    build:
+      context: ../insurance-data-analyst-agent
+      dockerfile: Dockerfile
+    image: insurance-data-analyst-agent:platform
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://analyst_app:${ANALYST_DB_PASSWORD}@postgres:5432/analyst
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.7-flash}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      GROQ_MODEL: ${GROQ_MODEL:-openai/gpt-oss-120b}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    ports:
+      - "8003:8003"
+    volumes:
+      - analyst_output:/app/output
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8003/health').status == 200 else 1)"
+      interval: 10s
+      timeout: 5s
+      retries: 5
       start_period: 10s
     restart: unless-stopped
 
@@ -85,3 +117,4 @@ volumes:
   rag_vector_store:
   rag_artifacts:
   rag_model_cache:
+  analyst_output:
