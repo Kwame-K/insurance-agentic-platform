@@ -108,9 +108,88 @@ services:
       SUBMISSION_EXTRACTOR_TIMEOUT_SECONDS: ${SUBMISSION_EXTRACTOR_TIMEOUT_SECONDS:-30}
       KNOWLEDGE_AGENT_BASE_URL: http://knowledge-agent:8001
       KNOWLEDGE_AGENT_TIMEOUT_SECONDS: ${KNOWLEDGE_AGENT_TIMEOUT_SECONDS:-10}
+      PORTFOLIO_ANALYST_BASE_URL: http://data-analyst-agent:8003
+      PORTFOLIO_ANALYST_TIMEOUT_SECONDS: ${PORTFOLIO_ANALYST_TIMEOUT_SECONDS:-30}
     ports:
       - "8002:8002"
     restart: unless-stopped
+
+  email-intake:
+    build:
+      context: ../insurance-email-intake
+      dockerfile: Dockerfile
+    image: insurance-email-intake:platform
+    depends_on:
+      underwriting-agent:
+        condition: service_started
+    environment:
+      UNDERWRITING_BASE_URL: http://underwriting-agent:8002
+      UNDERWRITING_TIMEOUT_SECONDS: ${EMAIL_INTAKE_TIMEOUT_SECONDS:-120}
+      INBOX_DIR: /app/data/inbox
+      STATE_DIR: /app/data/state
+      WATCH_ENABLED: "true"
+      WATCH_INTERVAL_SECONDS: "10"
+      IMAP_ENABLED: ${IMAP_ENABLED:-false}
+      IMAP_HOST: ${IMAP_HOST:-imap.gmail.com}
+      IMAP_PORT: ${IMAP_PORT:-993}
+      IMAP_USER: ${IMAP_USER:-}
+      IMAP_PASSWORD: ${IMAP_PASSWORD:-}
+      IMAP_FOLDER: ${IMAP_FOLDER:-INBOX}
+      IMAP_POLL_INTERVAL_SECONDS: ${IMAP_POLL_INTERVAL_SECONDS:-30}
+      IMAP_ALLOWED_SENDERS: ${IMAP_ALLOWED_SENDERS:-}
+      SMTP_REPLY_ENABLED: ${SMTP_REPLY_ENABLED:-false}
+      SMTP_HOST: ${SMTP_HOST:-smtp.gmail.com}
+      SMTP_PORT: ${SMTP_PORT:-465}
+      REPLY_LANGUAGE: ${REPLY_LANGUAGE:-en}
+
+
+    ports:
+      - "8004:8004"
+    volumes:
+      - ../insurance-email-intake/data/inbox:/app/data/inbox:ro
+      - email_intake_state:/app/data/state
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8004/health').status == 200 else 1)"
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+
+
+  underwriting-ui:
+    build:
+      context: ../insurance-underwriting-ui
+      dockerfile: Dockerfile
+    image: insurance-underwriting-ui:platform
+    depends_on:
+      email-intake:
+        condition: service_healthy
+      underwriting-agent:
+        condition: service_started
+    environment:
+      INTAKE_BASE_URL: http://email-intake:8004
+      UNDERWRITING_BASE_URL: http://underwriting-agent:8002
+      REQUEST_TIMEOUT_SECONDS: ${UI_REQUEST_TIMEOUT_SECONDS:-120}
+    ports:
+      - "8501:8501"
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8501/_stcore/health').status == 200 else 1)"
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    restart: unless-stopped
+
+
 
 volumes:
   postgres_data:
@@ -118,3 +197,4 @@ volumes:
   rag_artifacts:
   rag_model_cache:
   analyst_output:
+  email_intake_state:

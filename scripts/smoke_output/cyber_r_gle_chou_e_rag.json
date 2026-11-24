@@ -1,0 +1,224 @@
+{
+  "source_id": "SMOKE-cyber_submission-672d7216",
+  "correlation_id": "13552920-8d8d-4ba3-9cda-72ede351122f",
+  "workflow_status": "EVALUATED",
+  "extraction_status": "COMPLETE",
+  "review_required": false,
+  "missing_fields": [
+    "handles_personal_data",
+    "handles_payment_card_data",
+    "endpoint_detection_response",
+    "offline_backups"
+  ],
+  "ambiguous_fields": [],
+  "data_quality_flags": [],
+  "inferred_fields": [
+    "country"
+  ],
+  "overridden_fields": [
+    "mfa_enabled",
+    "requested_limit_cad",
+    "requested_retention_cad"
+  ],
+  "mapping_messages": [],
+  "submission": {
+    "submission_id": "SMOKE-cyber_submission-672d7216",
+    "product_line": "CYBER_SME",
+    "applicant_name": "NorthLake Analytics Inc.",
+    "country": "Canada",
+    "province": "QC",
+    "industry": "data consulting firm",
+    "annual_revenue_cad": 4200000.0,
+    "employee_count": 35,
+    "handles_personal_data": null,
+    "handles_payment_card_data": null,
+    "mfa_enabled": false,
+    "endpoint_detection_response": null,
+    "offline_backups": null,
+    "prior_cyber_claims": 0,
+    "requested_limit_cad": 1000000.0,
+    "requested_retention_cad": 10000.0
+  },
+  "decision": {
+    "decision_id": "DEC-72d60858-bbc6-4ba8-b7ba-0662bf948bf2",
+    "submission_id": "SMOKE-cyber_submission-672d7216",
+    "decision": "PENDING_UNDERWRITING",
+    "human_review_required": false,
+    "risk_score": 74.0,
+    "risk_band": "SEVERE",
+    "risk_factors": [
+      {
+        "factor_id": "RSK-001",
+        "factor_name": "Base cyber exposure",
+        "points": 15.0,
+        "message": "Base score applied to every eligible cyber SME submission."
+      },
+      {
+        "factor_id": "RSK-002",
+        "factor_name": "Annual revenue exposure",
+        "points": 5.0,
+        "message": "Annual revenue of 4,200,000 CAD contributes 5 risk points."
+      },
+      {
+        "factor_id": "RSK-003",
+        "factor_name": "Employee count exposure",
+        "points": 3.0,
+        "message": "Employee count of 35 contributes 3 risk points."
+      },
+      {
+        "factor_id": "RSK-004",
+        "factor_name": "Personal data exposure",
+        "points": 0.0,
+        "message": "No personal data exposure was declared."
+      },
+      {
+        "factor_id": "RSK-005",
+        "factor_name": "Payment card data exposure",
+        "points": 0.0,
+        "message": "No payment card data exposure was declared."
+      },
+      {
+        "factor_id": "RSK-006",
+        "factor_name": "Multi-factor authentication",
+        "points": 30.0,
+        "message": "Multi-factor authentication is not enabled, materially increasing account takeover risk."
+      },
+      {
+        "factor_id": "RSK-007",
+        "factor_name": "Endpoint detection and response",
+        "points": 8.0,
+        "message": "Endpoint detection and response is not confirmed or not deployed."
+      },
+      {
+        "factor_id": "RSK-008",
+        "factor_name": "Offline backup controls",
+        "points": 10.0,
+        "message": "Offline or immutable backup controls are not confirmed."
+      },
+      {
+        "factor_id": "RSK-009",
+        "factor_name": "Prior cyber claims",
+        "points": 0.0,
+        "message": "0 prior cyber claim(s) contribute 0 risk points."
+      },
+      {
+        "factor_id": "RSK-010",
+        "factor_name": "Requested insurance limit",
+        "points": 3.0,
+        "message": "Requested limit of 1,000,000 CAD contributes 3 risk points."
+      }
+    ],
+    "scoring_model_version": "0.1.0",
+    "base_exposure_premium_cad": 12600.0,
+    "indicated_premium_cad": 32130.0,
+    "pricing_factors": [
+      {
+        "factor_id": "PRC-001",
+        "factor_name": "Base exposure premium",
+        "multiplier": 1.0,
+        "message": "Annual revenue of 4,200,000 CAD produces a base exposure premium of 12,600.00 CAD."
+      },
+      {
+        "factor_id": "PRC-002",
+        "factor_name": "Requested limit factor",
+        "multiplier": 1.0,
+        "message": "Requested limit of 1,000,000 CAD applies a 1.0000 limit multiplier."
+      },
+      {
+        "factor_id": "PRC-003",
+        "factor_name": "Risk band multiplier",
+        "multiplier": 1.7,
+        "message": "Risk band SEVERE applies a 1.7000 pricing multiplier."
+      },
+      {
+        "factor_id": "PRC-004",
+        "factor_name": "Retention factor",
+        "multiplier": 1.5,
+        "message": "Requested retention of 10,000 CAD applies a 1.5000 retention multiplier."
+      }
+    ],
+    "pricing_model_version": "0.1.0",
+    "reasons": [
+      "The submission satisfies the current eligibility and appetite rules.",
+      "Risk scoring is complete and pricing evaluation is pending."
+    ],
+    "missing_information": [],
+    "referral_reasons": [],
+    "conditions": [
+      {
+        "condition_id": "COND-006",
+        "category": "SECURITY_REVIEW",
+        "message": "Complete an enhanced cybersecurity controls review before final underwriting approval."
+      }
+    ],
+    "rule_results": [
+      {
+        "rule_id": "UW-CYB-001",
+        "rule_name": "Supported territory requirement",
+        "passed": true,
+        "severity": "DECLINE",
+        "message": "The applicant is domiciled in a supported territory."
+      },
+      {
+        "rule_id": "UW-CYB-002",
+        "rule_name": "Excluded industry screening",
+        "passed": true,
+        "severity": "DECLINE",
+        "message": "The applicant industry is within the current underwriting appetite."
+      },
+      {
+        "rule_id": "UW-CYB-003",
+        "rule_name": "Multi-factor authentication requirement",
+        "passed": true,
+        "severity": "REFERRAL",
+        "message": "Multi-factor authentication is not a documented mandatory control at or below the revenue threshold of 5,000,000 CAD."
+      },
+      {
+        "rule_id": "UW-CYB-004",
+        "rule_name": "Automated capacity authority",
+        "passed": true,
+        "severity": "REFERRAL",
+        "message": "The requested limit is within automated underwriting authority."
+      },
+      {
+        "rule_id": "UW-CYB-005",
+        "rule_name": "Prior cyber claims review",
+        "passed": true,
+        "severity": "REFERRAL",
+        "message": "Prior cyber claims are within automated underwriting tolerance."
+      },
+      {
+        "rule_id": "UW-CYB-006",
+        "rule_name": "SME revenue authority",
+        "passed": true,
+        "severity": "REFERRAL",
+        "message": "Annual revenue is within automated SME underwriting authority."
+      }
+    ],
+    "evidence": [],
+    "evidence_retrieval_status": "NOT_REQUESTED",
+    "unresolved_evidence_finding_ids": [],
+    "evidence_retrieval_failure_reason": null,
+    "portfolio_context": {
+      "status": "SUCCESS",
+      "scope": "PROVINCE_ALL_LINES",
+      "province": "QC",
+      "loss_ratio": 0.224991,
+      "claim_frequency": 0.122013,
+      "average_severity": 24285.82,
+      "policy_count": 180,
+      "premium_per_exposure_unit": 13170.26,
+      "share_of_policies_with_claims": 0.122222,
+      "underwriting_years": [
+        2024,
+        2025
+      ],
+      "disclaimer": "Contexte de portefeuille synthetique, toutes lignes confondues. Ce n'est pas un signal cyber et il n'influence ni les regles ni le score.",
+      "failure_reason": null
+    },
+    "policy_version": "0.6.0",
+    "created_at": "2026-11-19T23:33:58.591643Z"
+  },
+  "persisted": true,
+  "message": "Extraction mapped and evaluated; decision persisted."
+}
