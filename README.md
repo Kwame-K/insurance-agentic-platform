@@ -1,91 +1,108 @@
 # Insurance Agentic Platform
 
-Local Docker Compose platform for four HTTP-facing projects in an insurance-agentic-AI portfolio, plus a shared PostgreSQL server:
+Local Docker Compose platform for six insurance applications and a shared PostgreSQL server. It brings together submission extraction, portfolio analytics, documentary evidence retrieval, underwriting, broker email intake, and a Streamlit console.
 
-1. Submission Extractor
-2. Data Analyst Agent
-3. Insurance Knowledge Agent (RAG)
-4. Underwriting Agent
+This repository is the orchestration layer. Application code and underwriting rules live in the sibling repositories. This repository provides builds, networking, environment configuration, database provisioning, and persistent volumes.
 
-This repository is an orchestration layer only. It builds the sibling projects, provides networking, environment configuration, volumes, and PostgreSQL databases; it contains no domain rules, prompts, or application source code.
-
-> **Scope note:** this is a portfolio and learning project. All underwriting rules, risk scores, pricing, data, and insurance documents are synthetic or demonstrative.
+> **Scope:** This is a local portfolio and learning project. The underwriting rules, risk scores, pricing indications, and demonstration data are synthetic. The stack is not intended for production use or real underwriting decisions.
 
 ## Services
 
-| Service | Compose name | Local URL | Source project | Purpose |
+| Service | Compose name | Local address | Source repository | Purpose |
 |---|---|---|---|---|
-| Submission Extractor | `submission-extractor` | http://127.0.0.1:8000 | Project 1 (`../insurance-submission-extractor`) | Extracts and validates candidate submission data from broker text. |
-| Data Analyst Agent | `data-analyst-agent` | http://127.0.0.1:8003 | Project 2 (`../insurance-data-analyst-agent`) | Provides controlled, read-only portfolio analytics over synthetic PostgreSQL data. |
-| Insurance Knowledge Agent | `knowledge-agent` | http://127.0.0.1:8001 | Project 3 (`../insurance-rag-assistant`) | Retrieves grounded, cited policy evidence from its local Qdrant store. |
-| Underwriting Agent | `underwriting-agent` | http://127.0.0.1:8002 | Project 4 (`../underwriting-agent`) | Orchestrates extraction, deterministic underwriting, risk scoring, pricing, and evidence retrieval. |
-| Shared PostgreSQL | `postgres` | `localhost:5432` by default | Platform infrastructure | Hosts isolated `extractor`, `analyst`, `underwriting`, and reserved `knowledge` databases. |
+| Submission Extractor | `submission-extractor` | `http://127.0.0.1:8000` | [insurance-submission-extractor](https://github.com/Kwame-K/insurance-submission-extractor) | Extracts and validates candidate fields from submission text. |
+| Data Analyst Agent | `data-analyst-agent` | `http://127.0.0.1:8003` | [insurance-data-analyst-agent](https://github.com/Kwame-K/insurance-data-analyst-agent) | Computes deterministic metrics over a synthetic insurance portfolio. |
+| Insurance Knowledge Agent | `knowledge-agent` | `http://127.0.0.1:8001` | [insurance-rag-assistant](https://github.com/Kwame-K/insurance-rag-assistant) | Retrieves documentary evidence and citations from its local Qdrant index. |
+| Underwriting Agent | `underwriting-agent` | `http://127.0.0.1:8002` | [underwriting-agent](https://github.com/Kwame-K/underwriting-agent) | Applies deterministic underwriting rules, scores risk, produces a synthetic pricing indication, and supports decision review. |
+| Email Intake | `email-intake` | `http://127.0.0.1:8004` | [insurance-email-intake](https://github.com/Kwame-K/insurance-email-intake) | Accepts broker email content and forwards it to the Underwriting Agent. |
+| Underwriting UI | `underwriting-ui` | `http://127.0.0.1:8501` | [insurance-underwriting-ui](https://github.com/Kwame-K/insurance-underwriting-ui) | Provides a Streamlit console for email intake, decision details, and human review. |
+| Shared PostgreSQL | `postgres` | `localhost:5432` by default | Platform infrastructure | Hosts separate `extractor`, `analyst`, `underwriting`, and reserved `knowledge` databases. |
+
+The local addresses above are for clients on the host. Containers call each other by Compose service name.
 
 ## Architecture
 
 ```text
-                         Docker Compose network
+underwriting-ui :8501 ──► email-intake :8004 ──► underwriting-agent :8002
+        └─────────────────────────────────────►         │
+                                                        ├──► submission-extractor :8000
+                                                        ├──► knowledge-agent :8001
+                                                        └──► data-analyst-agent :8003
 
-  submission-extractor  <---- extraction request ----  underwriting-agent
-  :8000                                                  :8002
-                                                              |
-  knowledge-agent        <----- evidence retrieval ----------'
-  :8001
-
-  data-analyst-agent :8003 ---- deployed independently ---->
-  (its direct API is available after its database is initialized)
-
-  postgres :5432 -- extractor, analyst, underwriting, knowledge
+postgres :5432 ──► extractor, analyst, underwriting, and reserved knowledge databases
 ```
 
-The active Compose configuration connects Underwriting to the Submission Extractor and Knowledge Agent. The Data Analyst is deployed and independently usable, but it is **not yet wired into Underwriting**: `PORTFOLIO_ANALYST_BASE_URL` is not set in `compose.yaml`, so Underwriting retains its in-container default of `http://127.0.0.1:8003`. See [Known limitations](#known-limitations).
+The Underwriting Agent calls the Submission Extractor when processing raw submission text. It can also retrieve documentary evidence and request assistive portfolio context. That context does not change the underwriting decision, risk score, or pricing indication.
 
-## Repository layout
+Compose sets `PORTFOLIO_ANALYST_BASE_URL=http://data-analyst-agent:8003`. The HTTP integration is configured, but Underwriting does not wait for the Analyst API to be ready or for its dataset to be initialized. If the Analyst is unavailable, the underwriting result can still be returned without portfolio context.
+
+The Knowledge Agent uses local Qdrant in this stack. Its PostgreSQL database is provisioned but is not the active vector store.
+
+## Repository Layout
 
 ```text
 insurance-agentic-platform/
-├── compose.yaml          # Four application services plus PostgreSQL
-├── postgres/init/        # One-time database and role provisioning
-├── .env.example          # Configuration template; copy locally to .env
-├── .env                  # Local secrets and overrides (never committed)
+├── compose.yaml                     # Six application services plus PostgreSQL
+├── postgres/init/                   # Database and role provisioning
+├── .env.example                     # Template for local configuration
 ├── .gitignore
-└── system-architecture_updated.md  # Supplementary architecture notes
+├── system-architecture_updated.md   # Supplementary architecture notes
+└── README.md
 ```
 
 ## Prerequisites
 
-- Docker and Docker Compose
-- The four sibling repositories at the relative paths used by `compose.yaml`:
+- Docker with the Docker Compose plugin.
+- The six application repositories cloned beside this repository. The build contexts in `compose.yaml` use relative paths.
+- A Groq API key for Groq-backed workflows, such as the default extraction configuration. Documentary evidence retrieval itself does not call a generation model.
 
-  ```text
-  ../insurance-submission-extractor
-  ../insurance-data-analyst-agent
-  ../insurance-rag-assistant
-  ../underwriting-agent
-  ```
+Your checkout should look like this:
 
-- A Groq API key when using the configured Groq-backed extraction and knowledge flows.
+```text
+workspace/
+├── insurance-agentic-platform/
+├── insurance-submission-extractor/
+├── insurance-data-analyst-agent/
+├── insurance-rag-assistant/
+├── underwriting-agent/
+├── insurance-email-intake/
+└── insurance-underwriting-ui/
+```
+
+Run the platform commands below from `insurance-agentic-platform/`.
 
 ## Configuration
-
-Copy the tracked template, then replace every password and provider-key placeholder with an appropriate value:
 
 ```bash
 cp .env.example .env
 ```
 
-`ANALYST_DB_PASSWORD` is intentionally blank in the template, but is required by Compose. Set it before running any Compose command. All database passwords are interpolated into PostgreSQL URLs, so use URL-safe values (for example, `openssl rand -hex 24`).
+Replace the database password placeholders and configure the provider keys you intend to use. Compose requires `POSTGRES_SUPERUSER_PASSWORD`, `EXTRACTOR_DB_PASSWORD`, `ANALYST_DB_PASSWORD`, `UNDERWRITING_DB_PASSWORD`, and `KNOWLEDGE_DB_PASSWORD`. Use URL-safe database passwords, as the application passwords are interpolated into connection URLs. Do not commit `.env`.
 
-| Agent | Database | Login role | Current use |
-|---|---|---|---|
-| Submission Extractor | `extractor` | `extractor_app` | Connected through `DATABASE_URL`; migration runs on first write. |
-| Data Analyst Agent | `analyst` | `analyst_app` | Connected through `DATABASE_URL`; schema and synthetic data must be initialized manually (below). |
-| Underwriting Agent | `underwriting` | `underwriting_app` | Connected through `DATABASE_URL`; Alembic migration runs on first persistence request. |
-| Knowledge Agent | `knowledge` | `knowledge_app` | Provisioned with `vector`; the service currently uses Qdrant instead. |
+| Database | Application role | Usage |
+|---|---|---|
+| `extractor` | `extractor_app` | Extraction history; automatic migrations are enabled in Compose. |
+| `analyst` | `analyst_app` | Synthetic portfolio; initialize its schema and dataset before using the analytics endpoints. |
+| `underwriting` | `underwriting_app` | Underwriting decision persistence and audit history. |
+| `knowledge` | `knowledge_app` | Reserved PostgreSQL database; the running Knowledge Agent uses Qdrant. |
 
-The PostgreSQL initialization script runs only for an empty `postgres_data` volume. Changing a password in `.env` after the first startup does not update the database role. For local reset only, use `docker compose down -v`; this deletes PostgreSQL data, the RAG index, model cache, Analyst output artifacts, and Underwriting records.
+PostgreSQL runs its initialization scripts only when the `postgres_data` volume is empty. Changing a password in `.env` after the first startup does not change the existing database role.
 
-Validate the resolved configuration before starting the platform:
+### Email Intake and UI
+
+| Setting | Platform configuration |
+|---|---|
+| Email Intake → Underwriting | `UNDERWRITING_BASE_URL=http://underwriting-agent:8002` |
+| Email Intake folder watcher | Enabled by Compose with `WATCH_ENABLED=true` and a 10-second interval. |
+| Email Intake inbox | `../insurance-email-intake/data/inbox` is mounted read-only at `/app/data/inbox`. |
+| Email Intake state | `/app/data/state`, backed by the `email_intake_state` volume. |
+| IMAP and SMTP reply options | Disabled by default: `IMAP_ENABLED=false` and `SMTP_REPLY_ENABLED=false`. |
+| UI → Email Intake | `INTAKE_BASE_URL=http://email-intake:8004` |
+| UI → Underwriting | `UNDERWRITING_BASE_URL=http://underwriting-agent:8002` |
+| Email Intake request timeout | `EMAIL_INTAKE_TIMEOUT_SECONDS` sets the container's `UNDERWRITING_TIMEOUT_SECONDS`; defaults to 120 seconds. |
+| UI request timeout | `UI_REQUEST_TIMEOUT_SECONDS` sets the container's `REQUEST_TIMEOUT_SECONDS`; defaults to 120 seconds. |
+
+Validate the resolved configuration:
 
 ```bash
 docker compose config --quiet
@@ -93,9 +110,7 @@ docker compose config --quiet
 
 ## Start
 
-### 1. Initialize PostgreSQL and the Analyst dataset
-
-The Data Analyst API starts without running migrations or seeding its synthetic portfolio. Initialize it once before using `/v1` analytics endpoints:
+### 1. Initialize PostgreSQL and the Analyst Dataset
 
 ```bash
 docker compose up --build -d postgres
@@ -103,60 +118,41 @@ docker compose run --build --rm data-analyst-agent \
   insurance-data-analyst init-db --seed 20260904
 ```
 
-The initialization command applies migrations and loads the synthetic dataset. Re-running it replaces the dataset, so do not use it against non-synthetic data.
+The initialization command applies migrations and loads the synthetic portfolio. Re-running it replaces the dataset. Do not run it against a database containing non-synthetic data.
 
-### 2. Start all services
+### 2. Start All Services
 
 ```bash
 docker compose up --build -d
+docker compose ps
 ```
 
-To observe logs in the foreground, omit `-d`.
+The first Knowledge Agent build or startup can take longer while model files are downloaded. The vector index must contain the intended corpus for documentary evidence to be available; see the [Knowledge Agent ingestion instructions](https://github.com/Kwame-K/insurance-rag-assistant#ingestion).
 
-The Knowledge Agent’s first build and startup can take longer because it downloads its multilingual embedding model.
+Open the Streamlit console at `http://127.0.0.1:8501`. You can submit email text or an `.eml` file, inspect its result, and use the human-review queue for stored decisions that require review.
 
-## Stop and reset
+## Health Checks
 
 ```bash
-docker compose down
+curl -f http://127.0.0.1:8000/health           # Submission Extractor
+curl -f http://127.0.0.1:8001/health           # Knowledge Agent
+curl -f http://127.0.0.1:8002/health           # Underwriting Agent
+curl -f http://127.0.0.1:8003/health           # Data Analyst Agent
+curl -f http://127.0.0.1:8004/health           # Email Intake
+curl -f http://127.0.0.1:8501/_stcore/health   # Streamlit
 ```
 
-For a full local reset, including all named volumes:
+These checks do not prove that the Analyst dataset is loaded, the RAG index is populated, or the provider credentials work. Use a workflow request to check the integrations.
+
+## Test the Extraction and Underwriting Flow
+
+Call Underwriting directly to test extraction and evaluation without going through Email Intake or the UI:
 
 ```bash
-docker compose down -v
-```
-
-## Persisted volumes
-
-| Volume | Mounted in | Purpose |
-|---|---|---|
-| `postgres_data` | `postgres:/var/lib/postgresql/data` | Shared PostgreSQL cluster and the four isolated databases. |
-| `analyst_output` | `data-analyst-agent:/app/output` | Analyst audit artifacts and optional charts. |
-| `rag_vector_store` | `knowledge-agent:/app/vector_store` | Local Qdrant collection of embedded policy documents. |
-| `rag_artifacts` | `knowledge-agent:/app/artifacts` | Retrieval evaluation reports. |
-| `rag_model_cache` | `knowledge-agent:/app/.cache` | Cached Hugging Face and sentence-transformers models. |
-
-## Health checks
-
-```bash
-curl http://127.0.0.1:8000/health  # Submission Extractor
-curl http://127.0.0.1:8001/health  # Knowledge Agent
-curl http://127.0.0.1:8002/health  # Underwriting Agent
-curl http://127.0.0.1:8003/health  # Data Analyst Agent
-```
-
-The Data Analyst health endpoint checks API liveness, not that its database has been migrated and seeded. Run the initialization step before calling its analytics endpoints.
-
-## Test the extraction-and-underwriting flow
-
-The combined endpoint calls the Submission Extractor and the Knowledge Agent. `persist` defaults to `false`; set it explicitly to persist a completed evaluation.
-
-```bash
-curl -i -X POST "http://127.0.0.1:8002/extract-and-underwrite" \
-  -H "Content-Type: application/json" \
-  -H "X-Correlation-ID: platform-e2e-001" \
-  -d '{{
+curl -i -X POST http://127.0.0.1:8002/extract-and-underwrite \
+  -H 'Content-Type: application/json' \
+  -H 'X-Correlation-ID: platform-e2e-001' \
+  -d '{
     "source_id": "SRC-PLATFORM-001",
     "source_type": "FREE_TEXT",
     "content": "We are a Montreal software company seeking cyber insurance. Annual revenue is CAD 2,000,000 and we employ 18 people.",
@@ -166,40 +162,68 @@ curl -i -X POST "http://127.0.0.1:8002/extract-and-underwrite" \
       "requested_limit_cad": 1000000,
       "requested_retention_cad": 25000
     },
-    "persist": true
+    "persist": false
   }'
 ```
 
-The response can still be `PENDING_INFORMATION` if the extracted submission is incomplete or requires human review; those outcomes are not persisted by this endpoint.
+`persist` defaults to `false`. Set it to `true` to save a completed evaluation. The example demonstrates the request format; it does not guarantee a completed evaluation. If extraction or underwriting still needs information, the endpoint can return `PENDING_INFORMATION` without saving a decision.
 
-## Service readiness and network boundaries
+To test the email intake path instead, use the Streamlit submission page or call an endpoint documented in [Email Intake](https://github.com/Kwame-K/insurance-email-intake#endpoints).
 
-- `submission-extractor`, `data-analyst-agent`, and `underwriting-agent` wait for PostgreSQL to be healthy.
-- Underwriting waits only for the Extractor container to start, not for its HTTP API or the Knowledge Agent to become ready.
-- Internal calls use Compose hostnames such as `http://submission-extractor:8000`, not `localhost`.
-- The short `ports` syntax in `compose.yaml` publishes ports according to Docker’s host defaults. For strict local-only access, bind each published port explicitly to `127.0.0.1` or apply host firewall rules.
+## Persisted Volumes
 
-## Known limitations
+| Volume | Mount | Purpose |
+|---|---|---|
+| `postgres_data` | `postgres:/var/lib/postgresql/data` | PostgreSQL cluster and application databases. |
+| `analyst_output` | `data-analyst-agent:/app/output` | Audit artifacts and optional charts. |
+| `rag_vector_store` | `knowledge-agent:/app/vector_store` | Local Qdrant index. |
+| `rag_artifacts` | `knowledge-agent:/app/artifacts` | Retrieval evaluation artifacts. |
+| `rag_model_cache` | `knowledge-agent:/app/.cache` | Model cache. |
+| `email_intake_state` | `email-intake:/app/data/state` | Stored Email Intake state and results. |
 
-- The Data Analyst service is deployed by default, but is not yet integrated into Underwriting because the platform does not set `PORTFOLIO_ANALYST_BASE_URL=http://data-analyst-agent:8003` or a readiness dependency. Underwriting therefore degrades its portfolio context to `UNAVAILABLE`.
-- The Analyst database initialization is a manual operator step; its health check does not prove that the schema or synthetic dataset exists.
-- There is no health-check-based readiness dependency from Underwriting to the Extractor, Knowledge Agent, or Data Analyst.
-- The Knowledge Agent uses local Qdrant rather than the reserved PostgreSQL/pgvector database.
-- There is no reverse proxy, TLS termination, authentication layer, centralized logging, distributed tracing, or PostgreSQL backup/restore process.
-- `docker compose down -v` irreversibly removes all local persisted state.
+The inbox directory is a read-only bind mount from the sibling Email Intake repository, not a named volume.
+
+## Stop and Reset
+
+Stop the stack while keeping named volumes:
+
+```bash
+docker compose down
+```
+
+For a full local reset:
+
+```bash
+docker compose down -v
+```
+
+**Warning:** `down -v` deletes the named volumes, including PostgreSQL records, Analyst artifacts, RAG indexes and caches, and Email Intake state. It does not delete the host inbox directory. Reinitialize the Analyst dataset after a reset.
+
+## Service Readiness and Network Boundaries
+
+- The Submission Extractor, Data Analyst, and Underwriting Agent wait for PostgreSQL to be healthy.
+- Underwriting waits for the Extractor container to start, not for its HTTP API to become ready. It has no readiness dependency on the Knowledge Agent or Data Analyst.
+- Email Intake waits for the Underwriting container to start. The UI waits for Email Intake to be healthy and the Underwriting container to start.
+- The published ports use Compose short syntax without explicit loopback bindings. The `127.0.0.1` URLs in this README do not restrict the network interfaces Docker binds to. For local-only access, bind published ports explicitly to `127.0.0.1` or restrict access at the host.
+
+## Known Limitations
+
+- Analyst schema migration and synthetic seeding are manual prerequisites. A healthy API does not mean the dataset is ready.
+- The Knowledge Agent's evidence depends on the populated Qdrant index. The reserved PostgreSQL knowledge database is not used for retrieval by default.
+- The stack does not provide a reverse proxy, TLS termination, platform-level authentication, centralized tracing, or a PostgreSQL backup and restore process.
+- Email Intake can accept email text but does not process PDF attachments in its v1 contract.
 
 ## Roadmap
 
-1. Configure Underwriting with `PORTFOLIO_ANALYST_BASE_URL=http://data-analyst-agent:8003` and a health-based dependency.
-2. Automate Analyst migrations and synthetic-data initialization with an idempotent initialization job or entrypoint.
-3. Add health checks for the Extractor and Knowledge Agent, then use `condition: service_healthy` for all Underwriting dependencies.
-4. Add Compose configuration validation and platform smoke tests to CI.
-5. Add a reverse proxy, authentication, TLS, centralized OpenTelemetry tracing, and a PostgreSQL backup/restore strategy before any non-local deployment.
+1. Automate Analyst migrations and synthetic dataset initialization.
+2. Add application readiness checks and use them where startup ordering matters.
+3. Add Compose validation and platform smoke tests to CI.
+4. Add authentication, TLS, observability, and backup and restore procedures before considering any non-local deployment.
 
-## Design principles
+## Design Principles
 
-- **Independent services:** application code remains in each sibling repository.
-- **HTTP boundaries:** agents communicate through explicit HTTP contracts, not each other’s tables.
-- **Database isolation:** each agent has its own database and login role; `PUBLIC` access is revoked by the initialization script.
-- **Explicit state:** PostgreSQL, Qdrant, analyst artifacts, and model cache use named volumes with deliberate reset behavior.
-- **Local secret handling:** credentials are injected from an untracked `.env` file, never baked into images or committed.
+- Keep domain logic in each application repository.
+- Integrate services through explicit HTTP contracts, not direct access to another application's tables.
+- Isolate application databases and login roles.
+- Document which state persists and which commands delete it.
+- Keep secrets in local configuration rather than in images or version control.
