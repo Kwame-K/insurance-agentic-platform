@@ -172,6 +172,9 @@ services:
       underwriting-agent:
         condition: service_started
     environment:
+      SUBMISSION_EXTRACTOR_BASE_URL: "http://submission-extractor:8000"
+      DATA_ANALYST_BASE_URL: "http://data-analyst-agent:8003"
+      KNOWLEDGE_AGENT_BASE_URL: "http://knowledge-agent:8001"
       INTAKE_BASE_URL: http://email-intake:8004
       UNDERWRITING_BASE_URL: http://underwriting-agent:8002
       REQUEST_TIMEOUT_SECONDS: ${UI_REQUEST_TIMEOUT_SECONDS:-120}

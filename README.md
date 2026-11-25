@@ -101,6 +101,10 @@ PostgreSQL runs its initialization scripts only when the `postgres_data` volume 
 | UI → Underwriting | `UNDERWRITING_BASE_URL=http://underwriting-agent:8002` |
 | Email Intake request timeout | `EMAIL_INTAKE_TIMEOUT_SECONDS` sets the container's `UNDERWRITING_TIMEOUT_SECONDS`; defaults to 120 seconds. |
 | UI request timeout | `UI_REQUEST_TIMEOUT_SECONDS` sets the container's `REQUEST_TIMEOUT_SECONDS`; defaults to 120 seconds. |
+| UI → Submission Extractor (health only) | `SUBMISSION_EXTRACTOR_BASE_URL=http://submission-extractor:8000` |
+| UI → Data Analyst | `DATA_ANALYST_BASE_URL=http://data-analyst-agent:8003` |
+| UI → Knowledge Agent | `KNOWLEDGE_AGENT_BASE_URL=http://knowledge-agent:8001` |
+
 
 Validate the resolved configuration:
 
@@ -119,6 +123,15 @@ docker compose run --build --rm data-analyst-agent \
 ```
 
 The initialization command applies migrations and loads the synthetic portfolio. Re-running it replaces the dataset. Do not run it against a database containing non-synthetic data.
+
+The Streamlit console also shows live service status and provides a workspace
+for portfolio questions, charts, cited RAG answers, and documentary passages.
+
+To test these features, initialize the synthetic Analyst dataset and make
+sure the Knowledge Agent's Qdrant index contains the intended corpus. The
+cited-answer mode also requires `GROQ_API_KEY` on `knowledge-agent`. The
+source-passage mode works without a generation key.
+
 
 ### 2. Start All Services
 
