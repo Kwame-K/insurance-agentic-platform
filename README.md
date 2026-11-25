@@ -228,10 +228,9 @@ docker compose down -v
 
 ## Roadmap
 
-1. Automate Analyst migrations and synthetic dataset initialization.
-2. Add application readiness checks and use them where startup ordering matters.
-3. Add Compose validation and platform smoke tests to CI.
-4. Add authentication, TLS, observability, and backup and restore procedures before considering any non-local deployment.
+1. Add application readiness checks and use them where startup ordering matters.
+2. Add Compose validation and platform smoke tests to CI.
+3. Add authentication, TLS, observability, and backup and restore procedures before considering any non-local deployment.
 
 ## Design Principles
 
