@@ -1,0 +1,16 @@
+services:
+  postgres:
+    ports: !reset []
+  submission-extractor:
+    ports: !reset []
+  knowledge-agent:
+    ports: !reset []
+  underwriting-agent:
+    ports: !reset []
+  data-analyst-agent:
+    ports: !reset []
+  email-intake:
+    ports: !reset []
+  underwriting-ui:
+    ports: !override
+      - "127.0.0.1:8501:8501"
